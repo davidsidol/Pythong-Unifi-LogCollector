@@ -1,0 +1,23 @@
+[listener]
+# Bind interface and port for incoming syslog.
+# Use 514 if running with elevated privileges, otherwise keep 5514.
+host = 0.0.0.0
+port = 5514
+
+# Comma-separated: udp, tcp, or udp,tcp
+protocols = udp
+
+# Truncate oversized messages to this many bytes.
+max_message_size = 65535
+
+[storage]
+# Local or UNC path where collected logs will be written.
+# Example local: D:\UnifiLogs
+# Example UNC: \\FILESERVER01\NetworkLogs\Unifi
+log_directory = D:\UnifiLogs
+
+[application]
+log_level = INFO
+
+# Optional application log file for collector operational logs.
+log_file = D:\UnifiLogs\collector.log
