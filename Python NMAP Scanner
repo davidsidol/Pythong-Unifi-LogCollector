@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""
+nmap_docker_scanner.py
+Deploy and run nmap scans inside a Docker container.
+"""
+
+import argparse
+import subprocess
+import sys
+import shutil
+from datetime import datetime
+
+
+DOCKER_IMAGE = "instrumentisto/nmap"
+
+
+def check_docker():
+    """Ensure Docker is installed and the daemon is running."""
+    if not shutil.which("docker"):
+        print("[ERROR] Docker is not installed or not in PATH.")
+        sys.exit(1)
+    result = subprocess.run(
+        ["docker", "info"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        print("[ERROR] Docker daemon is not running. Please start Docker.")
+        sys.exit(1)
+    print("[OK] Docker is available.")
+
+
+def pull_image(image: str):
+    """Pull the nmap Docker image if not already present."""
+    print(f"[*] Pulling image: {image} ...")
+    result = subprocess.run(["docker", "pull", image])
+    if result.returncode != 0:
+        print(f"[ERROR] Failed to pull image '{image}'.")
+        sys.exit(1)
+    print(f"[OK] Image '{image}' is ready.")
+
+
+def run_scan(
+    target: str,
+    nmap_args: str,
+    image: str,
+    output_file: str | None,
+    privileged: bool,
+):
+    """
+    Launch a Docker container that runs nmap against the target.
+
+    Returns the scan output as a string.
+    """
+    docker_cmd = ["docker", "run", "--rm"]
+
+    if privileged:
+        docker_cmd.append("--privileged")
+        docker_cmd += ["--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW"]
+
+    docker_cmd += ["--network", "host"]
+    docker_cmd.append(image)
+
+    # Build the nmap command
+    nmap_cmd = nmap_args.split() + [target]
+    docker_cmd += nmap_cmd
+
+    print(f"\n[*] Running: {' '.join(docker_cmd)}\n")
+    print("=" * 60)
+
+    result = subprocess.run(docker_cmd, capture_output=True, text=True)
+    output = result.stdout
+    errors = result.stderr
+
+    if output:
+        print(output)
+    if errors:
+        print("[stderr]", errors, file=sys.stderr)
+
+    print("=" * 60)
+
+    if output_file:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{output_file}_{timestamp}.txt"
+        with open(filename, "w") as f:
+            f.write(f"# nmap scan of {target}\n")
+            f.write(f"# Arguments: {nmap_args}\n")
+            f.write(f"# Timestamp: {timestamp}\n\n")
+            f.write(output)
+            if errors:
+                f.write("\n\n# STDERR\n")
+                f.write(errors)
+        print(f"\n[*] Results saved to: {filename}")
+
+    return result.returncode
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Deploy a Docker container to run nmap scans.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Quick SYN scan of a host
+  python nmap_docker_scanner.py 192.168.1.1
+
+  # Service/version detection on a subnet
+  python nmap_docker_scanner.py 192.168.1.0/24 -a "-sV -p 22,80,443"
+
+  # OS detection (requires --privileged)
+  python nmap_docker_scanner.py 10.0.0.1 -a "-O -sS" --privileged
+
+  # Save output to file
+  python nmap_docker_scanner.py example.com -a "-sV" -o scan_results
+
+  # Use a custom nmap image
+  python nmap_docker_scanner.py 10.0.0.1 --image my-custom-nmap:latest
+        """,
+    )
+    parser.add_argument("target", help="Target IP, hostname, or CIDR range")
+    parser.add_argument(
+        "-a", "--args",
+        default="-sV -T4 --open",
+        help='nmap arguments (default: "-sV -T4 --open")',
+    )
+    parser.add_argument(
+        "--image",
+        default=DOCKER_IMAGE,
+        help=f"Docker image to use (default: {DOCKER_IMAGE})",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        default=None,
+        help="Base filename to save scan output (timestamp appended automatically)",
+    )
+    parser.add_argument(
+        "--privileged",
+        action="store_true",
+        help="Run container in privileged mode (required for -O, -sS, etc.)",
+    )
+    parser.add_argument(
+        "--no-pull",
+        action="store_true",
+        help="Skip pulling the Docker image (use cached version)",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    print("\n=== nmap Docker Scanner ===\n")
+
+    check_docker()
+
+    if not args.no_pull:
+        pull_image(args.image)
+
+    exit_code = run_scan(
+        target=args.target,
+        nmap_args=args.args,
+        image=args.image,
+        output_file=args.output,
+        privileged=args.privileged,
+    )
+
+    print(f"\n[*] Scan complete (exit code: {exit_code})")
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()

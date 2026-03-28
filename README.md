@@ -98,3 +98,50 @@ Each line is JSON, for example:
 - Port `514` may require elevated rights. Port `5514` avoids privilege issues.
 - If using a UNC path (`\\server\share\...`) as `log_directory`, the run account must have write access.
 - APs usually send UDP syslog by default.
+
+## TypeScript Nmap Scanner
+
+This repo now also includes a small TypeScript CLI that runs `nmap` inside a container.
+
+### Files
+
+- `package.json` - Node/TypeScript project metadata
+- `tsconfig.json` - TypeScript compiler settings
+- `src/index.ts` - scanner CLI
+- `Dockerfile` - multi-stage container build with `nmap`
+
+### Build
+
+```bash
+docker build -t ts-nmap-scanner .
+```
+
+### Run
+
+Host networking gives the container the clearest path for network scans on Linux:
+
+```bash
+docker run --rm --network host ts-nmap-scanner --target scanme.nmap.org --top-ports 20 --service-info --json
+```
+
+If you prefer a specific port range:
+
+```bash
+docker run --rm --network host ts-nmap-scanner --target 192.168.1.0/24 --ports 22,80,443
+```
+
+### CLI options
+
+- `--target <host-or-cidr>` required scan target
+- `--ports <list>` explicit ports or ranges
+- `--top-ports <number>` most common ports to scan
+- `--timing <T0-T5>` nmap timing template
+- `--service-info` enable service/version detection
+- `--os-detect` enable OS detection
+- `--ipv6` enable IPv6 mode
+- `--json` return structured JSON with stdout/stderr
+
+### Notes
+
+- Some scan types and OS detection may require elevated container privileges depending on your host environment.
+- Docker Desktop on macOS/Windows handles networking differently than Linux, so `--network host` may not behave the same way.
