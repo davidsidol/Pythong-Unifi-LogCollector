@@ -1,0 +1,35 @@
+services:
+  scanner:
+    build:
+      context: .
+    image: david/nmap-scanner:latest
+    ports:
+      - "${NMAP_UI_PORT:-3000}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      PORT: "3000"
+      NMAP_TARGET: "${NMAP_TARGET:-host.docker.internal}"
+      NMAP_PORTS: "${NMAP_PORTS:-80,443}"
+      NMAP_SCAN_TYPE: "${NMAP_SCAN_TYPE:-connect}"
+      NMAP_TIMING: "${NMAP_TIMING:-T3}"
+
+  scanner-syn:
+    build:
+      context: .
+    image: david/nmap-scanner:latest
+    ports:
+      - "${NMAP_UI_PORT_SYN:-3001}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    environment:
+      PORT: "3000"
+      NMAP_TARGET: "${NMAP_TARGET:-scanme.nmap.org}"
+      NMAP_TOP_PORTS: "${NMAP_TOP_PORTS:-20}"
+      NMAP_SCAN_TYPE: "syn"
+      NMAP_TIMING: "${NMAP_TIMING:-T3}"
+    profiles:
+      - syn

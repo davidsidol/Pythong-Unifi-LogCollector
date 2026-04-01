@@ -20,4 +20,8 @@ COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 
+USER node
+
+EXPOSE 3000
+
 ENTRYPOINT ["node", "dist/index.js"]

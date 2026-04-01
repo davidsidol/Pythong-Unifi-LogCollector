@@ -101,7 +101,7 @@ Each line is JSON, for example:
 
 ## TypeScript Nmap Scanner
 
-This repo now also includes a small TypeScript CLI that runs `nmap` inside a container.
+This repo now also includes a TypeScript-powered `nmap` container with a browser UI and CLI mode.
 
 ### Files
 
@@ -109,39 +109,121 @@ This repo now also includes a small TypeScript CLI that runs `nmap` inside a con
 - `tsconfig.json` - TypeScript compiler settings
 - `src/index.ts` - scanner CLI
 - `Dockerfile` - multi-stage container build with `nmap`
+- `compose.yaml` - Docker Desktop-friendly one-command runner
+- `.env.example` - sample Docker Compose scan defaults
 
 ### Build
 
 ```bash
-docker build -t ts-nmap-scanner .
+docker build -t david/nmap-scanner:latest .
 ```
 
-### Run
+### Run On Docker Desktop
 
-Host networking gives the container the clearest path for network scans on Linux:
+For Docker Desktop on macOS or Windows, the container now starts a web UI by default. Open it in a browser and enter the IP, hostname, or CIDR you want to scan.
+
+Using Docker Compose:
 
 ```bash
-docker run --rm --network host ts-nmap-scanner --target scanme.nmap.org --top-ports 20 --service-info --json
+docker compose up scanner
 ```
 
-If you prefer a specific port range:
+Then open [http://localhost:3000](http://localhost:3000).
+
+Set persistent defaults for Docker Desktop:
 
 ```bash
-docker run --rm --network host ts-nmap-scanner --target 192.168.1.0/24 --ports 22,80,443
+cp .env.example .env
 ```
+
+Then edit `.env` with the target and ports you want, for example:
+
+```dotenv
+NMAP_TARGET=scanme.nmap.org
+NMAP_PORTS=22,80,443
+NMAP_SCAN_TYPE=connect
+NMAP_TIMING=T4
+NMAP_UI_PORT=3000
+```
+
+After that, start the UI without repeating arguments:
+
+```bash
+docker compose up scanner
+```
+
+Run the SYN-capable UI profile on a second port when you want elevated scan behavior:
+
+```bash
+docker compose --profile syn up scanner-syn
+```
+
+That profile opens on [http://localhost:3001](http://localhost:3001) by default and includes `NET_RAW` and `NET_ADMIN`.
+
+If you still want the one-shot CLI behavior, pass scan arguments directly:
+
+```bash
+docker run --rm david/nmap-scanner:latest --target scanme.nmap.org --top-ports 20 --service-info --json
+```
+
+Launch the browser UI directly with Docker:
+
+```bash
+docker run --rm -p 3000:3000 david/nmap-scanner:latest
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+If you want direct CLI mode instead of the UI, pass scan arguments:
+
+```bash
+docker run --rm david/nmap-scanner:latest --target host.docker.internal --ports 80,443 --json
+```
+
+Scan another reachable system by IP or hostname:
+
+```bash
+docker run --rm david/nmap-scanner:latest --target scanme.nmap.org --top-ports 20 --service-info --json
+```
+
+If your Docker Desktop setup does not resolve `host.docker.internal`, add it explicitly:
+
+```bash
+docker run --rm --add-host host.docker.internal:host-gateway david/nmap-scanner:latest --target host.docker.internal --ports 80,443
+```
+
+If you need a SYN scan instead of the safer default connect scan, add Linux capabilities:
+
+```bash
+docker run --rm --cap-add NET_RAW --cap-add NET_ADMIN david/nmap-scanner:latest --target scanme.nmap.org --scan-type syn --top-ports 20
+```
+
+### UI behavior
+
+- The default browser form lets you enter a target IP, hostname, or CIDR.
+- Optional controls let you set ports, top ports, timing, scan type, service detection, OS detection, and IPv6.
+- Scan output is rendered back into the page after the form submits.
 
 ### CLI options
 
-- `--target <host-or-cidr>` required scan target
+- `--target <host-or-cidr>` scan target, defaulting to `host.docker.internal`
 - `--ports <list>` explicit ports or ranges
 - `--top-ports <number>` most common ports to scan
 - `--timing <T0-T5>` nmap timing template
+- `--scan-type <connect|syn>` connect scan by default, SYN when capabilities are available
 - `--service-info` enable service/version detection
 - `--os-detect` enable OS detection
 - `--ipv6` enable IPv6 mode
 - `--json` return structured JSON with stdout/stderr
+- `--web` start the browser UI explicitly
 
 ### Notes
 
-- Some scan types and OS detection may require elevated container privileges depending on your host environment.
-- Docker Desktop on macOS/Windows handles networking differently than Linux, so `--network host` may not behave the same way.
+- The container now runs as the non-root `node` user, which fits Docker Desktop better for normal `-sT` scans.
+- No-argument container launches now start the web UI instead of a one-shot scan.
+- `--scan-type connect` is the default because it works without raw socket privileges.
+- `--scan-type syn` and `--os-detect` may still need `--cap-add NET_RAW --cap-add NET_ADMIN`, and results can vary more on Docker Desktop than on native Linux.
+- Docker Desktop networking is VM-based, so host discovery and low-level fingerprinting are usually less accurate than on a native Linux host.
+- `compose.yaml` publishes the UI on `localhost:3000` by default, and the optional SYN profile publishes on `localhost:3001`.
+- The UI uses `host.docker.internal` as the default scan target, and you can override defaults with `NMAP_TARGET`, `NMAP_PORTS`, `NMAP_TOP_PORTS`, `NMAP_SCAN_TYPE`, `NMAP_TIMING`, `NMAP_UI_PORT`, and `NMAP_UI_PORT_SYN`.
+- `.env` is ignored by git, so you can keep your local scan defaults without committing them.
